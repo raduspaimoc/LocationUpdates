@@ -185,7 +185,11 @@ public class MainActivity extends AppCompatActivity {
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         mSettingsClient = LocationServices.getSettingsClient(this);
 
-        // Kick off the process of building the LocationCallback, LocationRequest, and
+        // Kick off the process of building the LocationCallback and LocationRequest objects
+        createLocationCallback();
+        createLocationRequest();
+        // Building the LocationSettingsRequest
+        buildLocationSettingsRequest();
 
 
 
@@ -242,6 +246,7 @@ public class MainActivity extends AppCompatActivity {
         // Sets the fastest rate for active location updates. This interval is exact, and your
         // application will never receive updates faster than this value.
         mLocationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
 
     }
@@ -254,8 +259,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 super.onLocationResult(locationResult);
-
-
+                mCurrentLocation = locationResult.getLastLocation();
                 mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
                 updateLocationUI();
             }
@@ -269,7 +273,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void buildLocationSettingsRequest() {
         LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder();
-
+        builder.addLocationRequest(mLocationRequest);
         mLocationSettingsRequest = builder.build();
     }
 
@@ -284,8 +288,8 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case Activity.RESULT_CANCELED:
                         Log.i(TAG, "User chose not to make required location settings changes.");
-
-
+                        mRequestingLocationUpdates = false;
+                        updateUI();
                         break;
                 }
                 break;
@@ -300,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
         if (!mRequestingLocationUpdates) {
             mRequestingLocationUpdates = true;
             setButtonsEnabledState();
-
+            startLocationUpdates();
         }
     }
 
@@ -327,11 +331,9 @@ public class MainActivity extends AppCompatActivity {
                     public void onSuccess(LocationSettingsResponse locationSettingsResponse) {
                         Log.i(TAG, "All location settings are satisfied.");
                         //noinspection MissingPermission
-                        if (ActivityCompat.checkSelfPermission(getApplicationContext(),
-                                Manifest.permission.ACCESS_FINE_LOCATION)==
-                                PackageManager.PERMISSION_GRANTED)
-                            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
-                                    mLocationCallback, Looper.myLooper());
+                        if (ActivityCompat.checkSelfPermission(getApplicationContext(),  Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+                            mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback, Looper.myLooper());
+                        updateUI();
 
 
                     }
@@ -395,12 +397,14 @@ public class MainActivity extends AppCompatActivity {
      */
     private void updateLocationUI() {
         if (mCurrentLocation != null) {
-            mLatitudeTextView.setText(String.format(Locale.ENGLISH, "%s: %f", mLatitudeLabel,
+            mLatitudeTextView.setText(String.format(Locale.ENGLISH, "%s: %f",
+                                        mLatitudeLabel, mCurrentLocation.getLongitude()));
 
-            mLongitudeTextView.setText(String.format(Locale.ENGLISH, "%s: %f", mLongitudeLabel,
+            mLongitudeTextView.setText(String.format(Locale.ENGLISH, "%s: %f",
+                                        mLongitudeLabel, mCurrentLocation.getLatitude()));
 
             mLastUpdateTimeTextView.setText(String.format(Locale.ENGLISH, "%s: %s",
-                    mLastUpdateTimeLabel, mLastUpdateTime)));
+                    mLastUpdateTimeLabel, mLastUpdateTime));
         }
     }
 
@@ -416,7 +420,14 @@ public class MainActivity extends AppCompatActivity {
         // It is a good practice to remove location requests when the activity is in a paused or
         // stopped state. Doing so helps battery performance and is especially
         // recommended in applications that request frequent location updates.
-        mFusedLocationClient.removeLocationUpdates(mLocationCallback);
+        mFusedLocationClient.removeLocationUpdates(mLocationCallback)
+        .addOnCompleteListener(this, new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                mRequestingLocationUpdates = false;
+                setButtonsEnabledState();
+            }
+        });
 
 
     }
@@ -492,8 +503,7 @@ public class MainActivity extends AppCompatActivity {
                     android.R.string.ok, new View.OnClickListener() {
                         @Override
                         public void onClick(View view) {
-
-
+                            startLocationPermissionRequest();
                         }
                     });
         } else {
